@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "apexai-universal-ops-plugin",
+  "owner": {
+    "name": "ApexAi"
+  },
+  "metadata": {
+    "description": "Claude Code plugins shipped from the ApexAi Universal Ops Plugin repository.",
+    "version": "1.0.0.dev12"
+  },
+  "plugins": [
+    {
+      "name": "apexai-ops",
+      "description": "Read-only inspection of the ApexAi Ops autonomous control plane over MCP.",
+      "version": "1.0.0.dev12",
+      "author": {
+        "name": "ApexAi"
+      },
+      "category": "operations",
+      "source": "./plugins/apexai-ops"
+    }
+  ]
+}

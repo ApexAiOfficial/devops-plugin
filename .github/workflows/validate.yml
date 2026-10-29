@@ -1,0 +1,59 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the pinned Claude Code CLI (lockfile, integrity-checked, no install scripts)
+        run: sh ci/pinned-cli/install.sh
+      - name: Validate the marketplace and the plugin (strict), with no credentials
+        run: |
+          home="$(mktemp -d)"
+          cli=ci/pinned-cli/node_modules/.bin/claude
+          env -i HOME="$home" PATH="$PATH" "$cli" plugin validate --strict .
+          env -i HOME="$home" PATH="$PATH" "$cli" plugin validate --strict plugins/apexai-ops
+      - name: The launcher refuses without the pinned engine
+        run: |
+          bash -n plugins/apexai-ops/bin/ops-mcp
+          python -I -m py_compile plugins/apexai-ops/bin/verify_pin.py
+          set +e
+          python -I plugins/apexai-ops/bin/verify_pin.py plugins/apexai-ops/pin.json
+          status=$?
+          set -e
+          test "$status" -eq 2
+          set +e
+          plugins/apexai-ops/bin/ops-mcp < /dev/null 2> refusal.txt
+          status=$?
+          set -e
+          test "$status" -eq 2
+          grep -q "pinned_distribution_missing" refusal.txt
+      - name: The versions agree
+        run: |
+          python - <<'PY'
+          import json
+          market = json.load(open(".claude-plugin/marketplace.json"))
+          plugin = json.load(open("plugins/apexai-ops/.claude-plugin/plugin.json"))
+          pin = json.load(open("plugins/apexai-ops/pin.json"))
+          versions = {market["metadata"]["version"], market["plugins"][0]["version"],
+                      plugin["version"], pin["version"]}
+          assert len(versions) == 1, versions
+          print("version", versions.pop())
+          PY

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Launch the ApexAi Ops read-only MCP server over stdio.
+#
+# Production (OPS_PROFILE unset or "production"): only the pinned
+# distribution (../pin.json) at its exact version, every RECORD digest
+# verified and the package resolved from those files, run isolated
+# (python -I: no PYTHONPATH, no user site). Anything else refuses (exit 2).
+# Development (OPS_PROFILE=development) keeps the old resolution order:
+#   1. an already-installed `apexai_ops` on the interpreter's path;
+#   2. the checkout this plugin lives in (plugins/apexai-ops -> ../../src).
+# Nothing but MCP protocol goes to stdout; diagnostics go to stderr.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+plugin_root="$(cd "$here/.." && pwd)"
+checkout_src="$(cd "$plugin_root/../.." 2>/dev/null && pwd)/src"
+
+python_bin="${APEXAI_OPS_PYTHON:-}"
+if [ -z "$python_bin" ]; then
+  for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      python_bin="$candidate"
+      break
+    fi
+  done
+fi
+if [ -z "$python_bin" ]; then
+  echo "apexai-ops mcp: no python interpreter found (set APEXAI_OPS_PYTHON)" >&2
+  exit 2
+fi
+
+case "${OPS_PROFILE:-production}" in
+  production)
+    "$python_bin" -I "$here/verify_pin.py" "$plugin_root/pin.json" || exit 2
+    exec "$python_bin" -I -m apexai_ops.mcp "$@"
+    ;;
+  development)
+    ;;
+  *)
+    echo "apexai-ops mcp: OPS_PROFILE must be production or development" >&2
+    exit 2
+    ;;
+esac
+
+if ! "$python_bin" -c "import apexai_ops" >/dev/null 2>&1; then
+  if [ -d "$checkout_src/apexai_ops" ]; then
+    export PYTHONPATH="$checkout_src${PYTHONPATH:+:$PYTHONPATH}"
+  else
+    echo "apexai-ops mcp: apexai_ops is not installed and no checkout was found next to the plugin" >&2
+    exit 2
+  fi
+fi
+
+exec "$python_bin" -m apexai_ops.mcp "$@"

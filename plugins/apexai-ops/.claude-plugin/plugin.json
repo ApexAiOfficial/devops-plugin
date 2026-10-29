@@ -1,0 +1,11 @@
+{
+  "name": "apexai-ops",
+  "version": "1.0.0.dev12",
+  "description": "Read-only inspection of the ApexAi Ops autonomous control plane over MCP: status, targets, incidents, work, effects, budgets, evidence.",
+  "author": {
+    "name": "ApexAi"
+  },
+  "license": "Apache-2.0",
+  "keywords": ["ops", "control-plane", "mcp", "incidents", "evidence"],
+  "mcpServers": "./.mcp.json"
+}

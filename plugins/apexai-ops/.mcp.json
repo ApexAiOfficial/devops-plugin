@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ops": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/ops-mcp",
+      "args": [],
+      "env": {
+        "OPS_CONTROL_STATE_PATH": "${OPS_CONTROL_STATE_PATH}",
+        "OPS_EVIDENCE_DIR": "${OPS_EVIDENCE_DIR}"
+      }
+    }
+  }
+}
