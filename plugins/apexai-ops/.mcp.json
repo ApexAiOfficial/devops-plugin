@@ -5,7 +5,8 @@
       "args": [],
       "env": {
         "OPS_CONTROL_STATE_PATH": "${OPS_CONTROL_STATE_PATH}",
-        "OPS_EVIDENCE_DIR": "${OPS_EVIDENCE_DIR}"
+        "OPS_EVIDENCE_DIR": "${OPS_EVIDENCE_DIR}",
+        "APEXAI_OPS_PYTHON": "${APEXAI_OPS_PYTHON:-}"
       }
     }
   }
