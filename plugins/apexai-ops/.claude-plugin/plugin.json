@@ -1,6 +1,6 @@
 {
   "name": "apexai-ops",
-  "version": "1.0.0.dev12",
+  "version": "1.0.0-dev.12.1",
   "description": "Read-only inspection of the ApexAI DevOps engine's control plane over MCP: status, health, targets, incidents, decisions, effects, budgets and evidence.",
   "author": {
     "name": "ApexAI",

@@ -45,15 +45,20 @@ jobs:
           set -e
           test "$status" -eq 2
           grep -q "pinned_distribution_missing" refusal.txt
-      - name: The versions agree
+      - name: The plugin's version is one value and extends the pinned engine's
         run: |
           python - <<'PY'
-          import json
+          import json, re
           market = json.load(open(".claude-plugin/marketplace.json"))
           plugin = json.load(open("plugins/apexai-ops/.claude-plugin/plugin.json"))
           pin = json.load(open("plugins/apexai-ops/pin.json"))
-          versions = {market["metadata"]["version"], market["plugins"][0]["version"],
-                      plugin["version"], pin["version"]}
+          versions = {market["metadata"]["version"], market["plugins"][0]["version"], plugin["version"]}
           assert len(versions) == 1, versions
-          print("version", versions.pop())
+          # The engine's PEP 440 development version in SemVer form, plus a plugin revision N >= 1:
+          # 1.0.0.dev12 -> 1.0.0-dev.12.N (a plugin-only fix raises N, so installs pick it up).
+          engine = re.fullmatch(r"(\d+\.\d+\.\d+)\.dev(\d+)", pin["version"])
+          assert engine, f"no plugin version form for engine {pin['version']} yet"
+          base = f"{engine[1]}-dev.{engine[2]}"
+          assert re.fullmatch(re.escape(base) + r"\.[1-9][0-9]*", plugin["version"]), (plugin["version"], base)
+          print("plugin", plugin["version"], "runs engine", pin["version"])
           PY

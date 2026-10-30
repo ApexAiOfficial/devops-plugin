@@ -118,21 +118,19 @@ first.
 
 ## Updating
 
-The plugin's version is the engine version it pins. While both stay on the development line, a
-plugin-only fix keeps the same version, and `claude plugin update` answers that the plugin is
-already at the latest version. Reinstall to pick up the fix:
+The plugin has its own version, `<engine version>.<plugin revision>`, which rises with every
+plugin change. To pick up the latest:
 
 ```bash
 claude plugin marketplace update apexai-universal-ops-plugin
 ```
 
 ```bash
-claude plugin uninstall apexai-ops@apexai-universal-ops-plugin
+claude plugin update apexai-ops@apexai-universal-ops-plugin
 ```
 
-```bash
-claude plugin install apexai-ops@apexai-universal-ops-plugin
-```
+An install made before `1.0.0-dev.12.1`, while the plugin's version was the engine's, updates
+the same way.
 
 ## How the launcher protects you
 
@@ -146,8 +144,9 @@ at its exact version:
 
 ## Status
 
-The plugin tracks the engine's development line `1.0.0.dev12`. It is **not a release**: it
-works with an engine installation at that exact version. Releases will be tagged here.
+The plugin is at `1.0.0-dev.12.1`: revision 1 of the plugin for the engine's development line
+`1.0.0.dev12`. It is **not a release**: it works with an engine installation at exactly the
+version in `pin.json`. Releases will be tagged here.
 
 ## Security
 
