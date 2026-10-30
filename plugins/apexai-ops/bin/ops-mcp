@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch the ApexAi Ops read-only MCP server over stdio.
+# Launch the ApexAI DevOps engine's read-only MCP server over stdio.
 #
 # Production (OPS_PROFILE unset or "production"): only the pinned
 # distribution (../pin.json) at its exact version, every RECORD digest
@@ -28,6 +28,14 @@ if [ -z "$python_bin" ]; then
   echo "apexai-ops mcp: no python interpreter found (set APEXAI_OPS_PYTHON)" >&2
   exit 2
 fi
+if ! command -v "$python_bin" >/dev/null 2>&1; then
+  echo "apexai-ops mcp: APEXAI_OPS_PYTHON is not an executable Python: $python_bin" >&2
+  exit 2
+fi
+if ! "$python_bin" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+  echo "apexai-ops mcp: the engine needs Python 3.11 or later; $python_bin is older (set APEXAI_OPS_PYTHON)" >&2
+  exit 2
+fi
 
 case "${OPS_PROFILE:-production}" in
   production)
@@ -46,7 +54,7 @@ if ! "$python_bin" -c "import apexai_ops" >/dev/null 2>&1; then
   if [ -d "$checkout_src/apexai_ops" ]; then
     export PYTHONPATH="$checkout_src${PYTHONPATH:+:$PYTHONPATH}"
   else
-    echo "apexai-ops mcp: apexai_ops is not installed and no checkout was found next to the plugin" >&2
+    echo "apexai-ops mcp: OPS_PROFILE=development needs apexai_ops importable from $python_bin, or the engine's source checkout around the plugin; neither was found" >&2
     exit 2
   fi
 fi

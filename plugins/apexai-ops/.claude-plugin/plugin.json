@@ -1,11 +1,20 @@
 {
   "name": "apexai-ops",
   "version": "1.0.0.dev12",
-  "description": "Read-only inspection of the ApexAi Ops autonomous control plane over MCP: status, targets, incidents, work, effects, budgets, evidence.",
+  "description": "Read-only inspection of the ApexAI DevOps engine's control plane over MCP: status, health, targets, incidents, decisions, effects, budgets and evidence.",
   "author": {
-    "name": "ApexAi"
+    "name": "ApexAI",
+    "url": "https://github.com/ApexAiOfficial"
   },
+  "homepage": "https://github.com/ApexAiOfficial/devops-plugin",
+  "repository": "https://github.com/ApexAiOfficial/devops-plugin",
   "license": "Apache-2.0",
-  "keywords": ["ops", "control-plane", "mcp", "incidents", "evidence"],
+  "keywords": [
+    "ops",
+    "control-plane",
+    "mcp",
+    "incidents",
+    "evidence"
+  ],
   "mcpServers": "./.mcp.json"
 }

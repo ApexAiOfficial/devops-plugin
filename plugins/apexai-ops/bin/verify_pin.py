@@ -22,9 +22,29 @@ from pathlib import Path
 _UNHASHED = re.compile(r"(?:^|/)RECORD(?:\.jws|\.p7s)?$|\.pyc$")
 
 
+_PIN = {"name": "apexai-ops", "version": "the pinned version", "installed": ""}
+
+
+def _hint(code: str) -> str:
+    """What a person can do about ``code``: the next step, never a credential or a path secret."""
+
+    name, version = _PIN["name"], _PIN["version"]
+    install = f"install the licensed engine {name}=={version}"
+    if code == "pin_unreadable":
+        return "the plugin's pin.json is missing or malformed: reinstall the plugin"
+    if code == "pinned_distribution_missing":
+        return f"{install} into {sys.executable}, or set APEXAI_OPS_PYTHON to a Python that has it"
+    if code == "version_mismatch":
+        installed = _PIN["installed"]
+        return f"{name} {installed} is installed; this plugin runs exactly {version}: {install}"
+    return (
+        f"the installed {name} does not match its own RECORD: reinstall it "
+        f"(pip install --force-reinstall --no-deps {name}=={version})"
+    )
+
+
 def _refuse(code: str) -> None:
-    hint = "set OPS_PROFILE=development to run a checkout"
-    print(f"apexai-ops mcp: refused ({code}); {hint}", file=sys.stderr)
+    print(f"apexai-ops mcp: refused ({code}); {_hint(code)}", file=sys.stderr)
     raise SystemExit(2)
 
 
@@ -34,11 +54,13 @@ def main() -> None:
         name, version = str(pin["distribution"]), str(pin["version"])
     except (IndexError, OSError, ValueError, KeyError, TypeError):
         _refuse("pin_unreadable")
+    _PIN.update(name=name, version=version)
     try:
         distribution = metadata.distribution(name)
     except metadata.PackageNotFoundError:
         _refuse("pinned_distribution_missing")
     if distribution.version != version:
+        _PIN["installed"] = distribution.version
         _refuse("version_mismatch")
     text = distribution.read_text("RECORD")
     if text is None:
