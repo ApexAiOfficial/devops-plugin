@@ -45,6 +45,20 @@ jobs:
           set -e
           test "$status" -eq 2
           grep -q "pinned_distribution_missing" refusal.txt
+      - name: The HTTP bridge serves nothing without its token
+        run: |
+          python -I -m py_compile plugins/apexai-ops/bin/ops_mcp_http.py
+          token="$(mktemp -d)/token"
+          python -I plugins/apexai-ops/bin/ops_mcp_http.py --init-token "$token"
+          python -I plugins/apexai-ops/bin/ops_mcp_http.py --token-file "$token" --port 18765 &
+          bridge=$!
+          sleep 2
+          body='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$body" http://127.0.0.1:18765/mcp)
+          test "$status" = 401
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H "Origin: https://evil.example" -H "Authorization: Bearer $(cat "$token")" -d "$body" http://127.0.0.1:18765/mcp)
+          test "$status" = 403
+          kill "$bridge"
       - name: The plugin's version is one value and extends the pinned engine's
         run: |
           python - <<'PY'

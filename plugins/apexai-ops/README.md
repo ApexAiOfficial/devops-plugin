@@ -7,6 +7,7 @@ Read-only inspection of the ApexAI DevOps engine's control plane over MCP.
 | `.claude-plugin/plugin.json` | The plugin manifest |
 | `.mcp.json` | One stdio MCP server, `ops`, started by `bin/ops-mcp` |
 | `bin/ops-mcp` | The launcher: verifies the pinned engine installation, then starts its MCP server |
+| `bin/ops_mcp_http.py` | The Streamable HTTP bridge, for clients that cannot run stdio, such as ChatGPT and the OpenAI API (`docs/openai.md` in the repository) |
 | `bin/verify_pin.py` | The verification: distribution, exact version, every `RECORD` digest, and the package resolved from those files |
 | `pin.json` | The engine distribution and version this plugin runs |
 | `commands/ops-triage.md` | `/apexai-ops:ops-triage`: a structured triage of health and what needs attention |

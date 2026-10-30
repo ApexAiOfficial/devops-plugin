@@ -1,6 +1,6 @@
 ---
 name: ops-inspection
-description: This skill should be used when the user asks what the ApexAI DevOps engine's controller did or why, or when using the read-only `ops_*` MCP tools - for example "what did the ops controller do", "why did the remediation escalate" or "fail", "is anything stuck or unresolved", "what needs attention", "is the effect budget exhausted", "who owns target X", "show me this incident" or "evidence packet", "is the control plane healthy". It says which tool answers which question and what an answer does not prove.
+description: This skill should be used when the user asks what the ApexAI DevOps engine's controller did or why, or uses the read-only `ops_*` MCP tools - e.g. "what did the ops controller do", "why did the remediation escalate" or "fail", "is anything stuck or unresolved", "what needs attention", "is the effect budget exhausted", "who owns target X", "show me this incident" or "evidence packet", "is the control plane healthy". It routes each question to a tool and says what an answer does not prove.
 ---
 
 # Reading the ApexAI DevOps control plane

@@ -9,11 +9,15 @@ command.
 It never grants authority, requests a remediation or runs a command. Every tool it exposes is a
 read.
 
+**OpenAI too.** The same server works with Codex, the ChatGPT desktop app, ChatGPT on the web and
+the OpenAI API: see [docs/openai.md](docs/openai.md).
+
 ## What this repository is, and is not
 
 This repository holds the plugin only:
 - its manifest and MCP configuration;
 - a launcher;
+- an HTTP bridge for clients that cannot run stdio;
 - one command and one skill.
 
 The DevOps engine, including its MCP server, is proprietary, licensed separately and **not** in
