@@ -116,6 +116,24 @@ first.
 | `store_schema_stale` | The store awaits migration: the engine's operator migrates it |
 | `evidence_not_configured` | Set `OPS_EVIDENCE_DIR` to read evidence packets |
 
+## Updating
+
+The plugin's version is the engine version it pins. While both stay on the development line, a
+plugin-only fix keeps the same version, and `claude plugin update` answers that the plugin is
+already at the latest version. Reinstall to pick up the fix:
+
+```bash
+claude plugin marketplace update apexai-universal-ops-plugin
+```
+
+```bash
+claude plugin uninstall apexai-ops@apexai-universal-ops-plugin
+```
+
+```bash
+claude plugin install apexai-ops@apexai-universal-ops-plugin
+```
+
 ## How the launcher protects you
 
 `plugins/apexai-ops/bin/ops-mcp` starts the server only from the pinned distribution, and only
