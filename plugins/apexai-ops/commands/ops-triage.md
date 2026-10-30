@@ -30,7 +30,8 @@ either: both are host operations, outside this read-only surface.
    code.
 2. Call `ops_health`. Report its `aggregate` and `complete`, and for each
    condition whose status is `holds` or `unknown`, its name, `severity` and
-   `since`. A condition that is `unknown` or `unevaluated` is never ok.
+   `since`. When `complete` is false, also name the conditions that are
+   `unevaluated`. A condition that is `unknown` or `unevaluated` is never ok.
    `ops_status`'s `health` covers only the store, so never call the control
    plane healthy from it alone.
 3. Call `ops_unresolved_work` with `limit` set to 20. Report its exact
@@ -72,9 +73,9 @@ either: both are host operations, outside this read-only surface.
    exhausted envelopes on that page. When the page is `truncated`, say how many
    exhausted envelopes it did not list: the counter minus those listed
    (`total_at_least` is a lower bound, not a count). Report its
-   `integrity_verdict`: anything but null is integrity damage the store's own
-   check found (the accounting invariant and orphan holds or charges are part
-   of that check).
+   `integrity_verdict`: null means no integrity verdict is latched, and
+   anything else is integrity damage the store's own check found (the
+   accounting invariant and orphan holds or charges are part of that check).
 8. If an incident id was given ($ARGUMENTS), call `ops_get_incident`, then
    `ops_get_work` for its latest decision, then `ops_get_effect` for that
    decision's current effect. When the decision's `latest_transition` cites a
@@ -82,7 +83,9 @@ either: both are host operations, outside this read-only surface.
    `evidence_packet_ids` holds only what the shown page of events cites.
 
 Report only the fields named above, quoting identifiers; do not paste whole
-records. Finish with a short factual summary of what the reads show, and no
-more: an expired lease says only that the lease expired, never that its owner
-crashed, died or lost control. State plainly when something could not be read
+records. Take every number from a read (a `total` or a counter) or from what
+step 6 or step 7 asks you to work out. Never count a list yourself to give
+any other number; name what is in it instead. Finish with a short factual
+summary of what the reads show, and no more: an expired lease says only that
+the lease expired, never that its owner crashed, died or lost control. State plainly when something could not be read
 and which error code was returned.
