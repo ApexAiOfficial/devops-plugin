@@ -40,7 +40,7 @@ In Claude Code:
 
 ```
 /plugin marketplace add ApexAiOfficial/devops-plugin
-/plugin install apexai-ops@apexai-universal-ops-plugin
+/plugin install apexai-ops@devops-plugin
 ```
 
 Or from a shell:
@@ -50,7 +50,7 @@ claude plugin marketplace add ApexAiOfficial/devops-plugin
 ```
 
 ```bash
-claude plugin install apexai-ops@apexai-universal-ops-plugin
+claude plugin install apexai-ops@devops-plugin
 ```
 
 ## Configure
@@ -97,7 +97,7 @@ line to stderr.
 - **Or run the launcher by hand,** with the same environment:
 
 ```bash
-"$(ls -d ~/.claude/plugins/cache/apexai-universal-ops-plugin/apexai-ops/*/ | tail -1)bin/ops-mcp" < /dev/null
+"$(ls -d ~/.claude/plugins/cache/devops-plugin/apexai-ops/*/ | tail -1)bin/ops-mcp" < /dev/null
 ```
 
 | The line says | What to do |
@@ -126,12 +126,16 @@ The plugin has its own version, `<engine version>.<plugin revision>`, which rise
 plugin change. To pick up the latest:
 
 ```bash
-claude plugin marketplace update apexai-universal-ops-plugin
+claude plugin marketplace update devops-plugin
 ```
 
 ```bash
-claude plugin update apexai-ops@apexai-universal-ops-plugin
+claude plugin update apexai-ops@devops-plugin
 ```
+
+The marketplace was named `apexai-universal-ops-plugin` before `1.0.0-dev.12.4`. An install made
+under that name: run `claude plugin marketplace remove apexai-universal-ops-plugin`, then add and
+install as above.
 
 An install made before `1.0.0-dev.12.1`, while the plugin's version was the engine's, updates
 the same way.
