@@ -1,0 +1,8 @@
+{
+  "name": "apexai-plugin-validate",
+  "private": true,
+  "description": "The pinned Claude Code CLI that validates this plugin in CI.",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.282"
+  }
+}

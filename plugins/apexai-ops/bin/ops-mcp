@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Launch the ApexAi DevOps engine's read-only MCP server over stdio.
+#
+# Production (OPS_PROFILE unset or "production"): only the pinned
+# distribution (../pin.json) at its exact version, every RECORD digest
+# verified, the package files equal to the pinned build digest and the
+# package resolved only from those files, run isolated
+# (python -I: no PYTHONPATH, no user site). Anything else refuses (exit 2).
+# Development (OPS_PROFILE=development) keeps the old resolution order:
+#   1. an already-installed `apexai_ops` on the interpreter's path;
+#   2. the checkout this plugin lives in (plugins/apexai-ops -> ../../src).
+# Nothing but MCP protocol goes to stdout; diagnostics go to stderr.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+plugin_root="$(cd "$here/.." && pwd)"
+checkout_src="$(cd "$plugin_root/../.." 2>/dev/null && pwd)/src"
+
+python_bin="${APEXAI_OPS_PYTHON:-}"
+if [ -z "$python_bin" ]; then
+  for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      python_bin="$candidate"
+      break
+    fi
+  done
+fi
+if [ -z "$python_bin" ]; then
+  echo "apexai-ops mcp: no python interpreter found (set APEXAI_OPS_PYTHON)" >&2
+  exit 2
+fi
+if ! command -v "$python_bin" >/dev/null 2>&1; then
+  echo "apexai-ops mcp: APEXAI_OPS_PYTHON is not an executable Python: $python_bin" >&2
+  exit 2
+fi
+if ! "$python_bin" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+  echo "apexai-ops mcp: the engine needs Python 3.11 or later; $python_bin is older (set APEXAI_OPS_PYTHON)" >&2
+  exit 2
+fi
+
+case "${OPS_PROFILE:-production}" in
+  production)
+    "$python_bin" -I "$here/verify_pin.py" "$plugin_root/pin.json" || exit 2
+    exec "$python_bin" -I -m apexai_ops.mcp "$@"
+    ;;
+  development)
+    ;;
+  *)
+    echo "apexai-ops mcp: OPS_PROFILE must be production or development" >&2
+    exit 2
+    ;;
+esac
+
+if ! "$python_bin" -c "import apexai_ops" >/dev/null 2>&1; then
+  if [ -d "$checkout_src/apexai_ops" ]; then
+    export PYTHONPATH="$checkout_src${PYTHONPATH:+:$PYTHONPATH}"
+  else
+    echo "apexai-ops mcp: OPS_PROFILE=development needs apexai_ops importable from $python_bin, or the engine's source checkout around the plugin; neither was found" >&2
+    exit 2
+  fi
+fi
+
+exec "$python_bin" -m apexai_ops.mcp "$@"

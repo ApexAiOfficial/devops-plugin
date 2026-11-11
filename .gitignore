@@ -1,0 +1,3 @@
+__pycache__/
+*.py[cod]
+ci/pinned-cli/node_modules/

@@ -1,0 +1,124 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the pinned Claude Code CLI (lockfile, integrity-checked, no install scripts)
+        run: sh ci/pinned-cli/install.sh
+      - name: Validate the marketplace and the plugin (strict), with no credentials
+        run: |
+          home="$(mktemp -d)"
+          cli=ci/pinned-cli/node_modules/.bin/claude
+          env -i HOME="$home" PATH="$PATH" "$cli" plugin validate --strict .
+          env -i HOME="$home" PATH="$PATH" "$cli" plugin validate --strict plugins/apexai-ops
+      - name: The launcher refuses without the pinned engine
+        run: |
+          bash -n plugins/apexai-ops/bin/ops-mcp
+          python -I -m py_compile plugins/apexai-ops/bin/verify_pin.py
+          set +e
+          python -I plugins/apexai-ops/bin/verify_pin.py plugins/apexai-ops/pin.json
+          status=$?
+          set -e
+          test "$status" -eq 2
+          set +e
+          plugins/apexai-ops/bin/ops-mcp < /dev/null 2> refusal.txt
+          status=$?
+          set -e
+          test "$status" -eq 2
+          grep -q "pinned_distribution_missing" refusal.txt
+      - name: The verifier refuses another build with the engine's name and version, accepts its own pin, and refuses added files
+        run: |
+          venv="$(mktemp -d)/venv"
+          python -m venv --without-pip "$venv"
+          site="$("$venv/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+          python -I - "$site" plugins/apexai-ops/pin.json <<'PY'
+          import base64, hashlib, json, sys
+          from pathlib import Path
+          site, pin = Path(sys.argv[1]), json.load(open(sys.argv[2]))
+          name, version = pin["distribution"], pin["version"]
+          info = f"{name.replace('-', '_')}-{version}.dist-info"
+          files = {
+              "apexai_ops/__init__.py": b"",
+              f"{info}/METADATA": f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n".encode(),
+          }
+          rows = []
+          for rel, data in files.items():
+              (site / rel).parent.mkdir(parents=True, exist_ok=True)
+              (site / rel).write_bytes(data)
+              digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+              rows.append(f"{rel},sha256={digest},{len(data)}")
+          rows.append(f"{info}/RECORD,,")
+          (site / info / "RECORD").write_text("\n".join(rows) + "\n")
+          PY
+          set +e
+          "$venv/bin/python" -I plugins/apexai-ops/bin/verify_pin.py plugins/apexai-ops/pin.json 2> refusal.txt
+          status=$?
+          set -e
+          cat refusal.txt
+          test "$status" -eq 2
+          grep -q "package_digest_mismatch" refusal.txt
+          # Pinned to its own digest, the same installation passes, and a file added inside the package does not.
+          digest="$("$venv/bin/python" -I plugins/apexai-ops/bin/verify_pin.py plugins/apexai-ops/pin.json --print-package-sha256)"
+          pin="$(mktemp -d)/pin.json"
+          python -I -c 'import json, sys; p = json.load(open(sys.argv[1])); p["package_sha256"] = sys.argv[2]; json.dump(p, open(sys.argv[3], "w"))' \
+            plugins/apexai-ops/pin.json "$digest" "$pin"
+          "$venv/bin/python" -I plugins/apexai-ops/bin/verify_pin.py "$pin" 2> accepted.txt
+          test ! -s accepted.txt
+          echo 'print("added")' > "$site/apexai_ops/added.py"
+          set +e
+          "$venv/bin/python" -I plugins/apexai-ops/bin/verify_pin.py "$pin" 2> refusal.txt
+          status=$?
+          set -e
+          cat refusal.txt
+          test "$status" -eq 2
+          grep -q "package_unrecorded_file" refusal.txt
+      - name: The HTTP bridge serves nothing without its token
+        run: |
+          python -I -m py_compile plugins/apexai-ops/bin/ops_mcp_http.py
+          token="$(mktemp -d)/token"
+          python -I plugins/apexai-ops/bin/ops_mcp_http.py --init-token "$token"
+          python -I plugins/apexai-ops/bin/ops_mcp_http.py --token-file "$token" --port 18765 &
+          bridge=$!
+          sleep 2
+          body='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$body" http://127.0.0.1:18765/mcp)
+          test "$status" = 401
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H "Origin: https://evil.example" -H "Authorization: Bearer $(cat "$token")" -d "$body" http://127.0.0.1:18765/mcp)
+          test "$status" = 403
+          kill "$bridge"
+      - name: The plugin's version is one value and extends the pinned engine's
+        run: |
+          python - <<'PY'
+          import json, re
+          market = json.load(open(".claude-plugin/marketplace.json"))
+          plugin = json.load(open("plugins/apexai-ops/.claude-plugin/plugin.json"))
+          pin = json.load(open("plugins/apexai-ops/pin.json"))
+          versions = {market["metadata"]["version"], market["plugins"][0]["version"], plugin["version"]}
+          assert len(versions) == 1, versions
+          # The engine's PEP 440 development version in SemVer form, plus a plugin revision N >= 1:
+          # 1.0.0.dev12 -> 1.0.0-dev.12.N (a plugin-only fix raises N, so installs pick it up).
+          engine = re.fullmatch(r"(\d+\.\d+\.\d+)\.dev(\d+)", pin["version"])
+          assert engine, f"no plugin version form for engine {pin['version']} yet"
+          base = f"{engine[1]}-dev.{engine[2]}"
+          assert re.fullmatch(re.escape(base) + r"\.[1-9][0-9]*", plugin["version"]), (plugin["version"], base)
+          print("plugin", plugin["version"], "runs engine", pin["version"])
+          PY
