@@ -16,7 +16,7 @@ Context Protocol (MCP), read-only: what the engine saw, what it decided, what it
 | | Status today |
 |---|---|
 | **Source** | Public on GitHub, under the Apache License 2.0 |
-| **Version** | `1.0.0-rc.1.2`, the plugin for the engine's release candidate `1.0.0rc1` ([versioning](#versioning-and-compatibility)) |
+| **Version** | `1.0.0-rc.1.3`, the plugin for the engine's release candidate `1.0.0rc1` ([versioning](#versioning-and-compatibility)) |
 | **Releases** | The engine's release candidate `1.0.0rc1` (2026-11-11), released privately by ApexAi for read-only monitoring. This repository has no Git tag or GitHub release yet |
 | **Distribution** | This repository's own Claude Code plugin marketplace only. Not published to PyPI, npm, Anthropic's official plugin directory or the MCP Registry |
 | **Needs** | An installation of ApexAi's build of the proprietary DevOps engine at exactly version `1.0.0rc1`, with the build digest in [`pin.json`](plugins/apexai-ops/pin.json), on the same machine, in an environment ApexAi operates. The engine is not in this repository and is not distributed |
@@ -394,7 +394,9 @@ In the default `production` profile, the launcher starts the server only when:
 - every file listed in the installation's own `RECORD` matches its SHA-256 digest and size;
 - the engine's package files are exactly ApexAi's build: their paths and digests hash to the
   `package_sha256` in [`pin.json`](plugins/apexai-ops/pin.json);
-- the engine package Python resolves is made only of those verified files.
+- the engine package Python resolves is made only of those verified files: nothing unrecorded, no
+  symbolic link and no bytecode without its source. The `__pycache__` caches an installer writes are
+  not part of a build and are not hashed.
 
 It then runs the server isolated (`python -I`: no `PYTHONPATH`, no user site). Anything else
 refuses, with exit status 2 and one line on stderr; nothing but MCP protocol goes to stdout.
@@ -432,7 +434,7 @@ the plugin promises.
 
 - **Plugin version.** The plugin's version is the pinned engine version in SemVer form plus a
   plugin revision: engine `1.0.0.dev12` gave plugin `1.0.0-dev.12.<revision>`, a release candidate
-  `1.0.0rc1` gives `1.0.0-rc.1.<revision>`, and the current version is `1.0.0-rc.1.2`. Each plugin
+  `1.0.0rc1` gives `1.0.0-rc.1.<revision>`, and the current version is `1.0.0-rc.1.3`. Each plugin
   change raises the revision. CI checks that the
   marketplace and plugin manifests carry one version and that it extends the pinned engine version.
 - **Pre-1.0.** These are development versions. No release has been tagged, and the tool surface,

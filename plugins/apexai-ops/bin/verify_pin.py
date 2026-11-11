@@ -18,11 +18,23 @@ digest does not depend on the installer, the Python version or the install
 location. It is checked when the engine starts; it cannot undo an
 installation, whose own code may already have run.
 
+Inside the package, nothing else may sit beside the verified files: no
+unrecorded file, no symbolic link and no sourceless bytecode (a ``.pyc``
+outside ``__pycache__``). The ``__pycache__`` caches that installers write are
+not part of a build and are not hashed. The check tells ApexAi's build from
+another one; it does not defend an environment someone else can already write
+to, where a ``.pth`` file runs before any check.
+
+A development release (a version ending ``.devN``) has no ApexAi build. Its
+pin names no digest, and only its version and RECORD are checked; the plugin
+is published only with a released build's pin, which must name its digest.
+
 To pin a new engine version, set its version in pin.json and run
 ``verify_pin.py pin.json --print-package-sha256`` with the Python of an
-installation made from ApexAi's own artifact. That mode runs every other check
-and prints the digest of whatever is installed: it cannot tell where the
-installation came from, so the value is ApexAi's only if the artifact was.
+installation made from ApexAi's own artifact, with ``python -I``. That mode runs
+every other check and prints the digest of whatever is installed: it cannot
+tell where the installation came from, so the value is ApexAi's only if the
+artifact was.
 """
 
 import base64
@@ -40,6 +52,7 @@ from pathlib import Path
 _UNHASHED = re.compile(r"(?:^|/)RECORD(?:\.jws|\.p7s)?$|\.pyc$")
 _PACKAGE = "apexai_ops"
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+_DEVELOPMENT = re.compile(r"\.dev[0-9]+$")
 _UNSAFE = re.compile(r"[^0-9A-Za-z.+!_-]")
 _PRINT = "--print-package-sha256"
 
@@ -56,7 +69,10 @@ def _hint(code: str) -> str:
 
     name, version = _PIN["name"], _PIN["version"]
     if code == "pin_unreadable":
-        return "the plugin's pin.json is missing or malformed: reinstall the plugin"
+        return (
+            "the plugin's pin.json is missing or malformed, or names a released engine without its "
+            "build digest: reinstall the plugin"
+        )
     if code == "pinned_distribution_missing":
         return (
             f"the DevOps engine {name} {version} is not installed for {sys.executable}: "
@@ -94,13 +110,20 @@ def _unreadable(_error: OSError) -> None:
 
 def main() -> None:
     printing = sys.argv[2:] == [_PRINT]
+    if printing and not sys.flags.isolated:
+        print("apexai-ops mcp: run --print-package-sha256 with python -I", file=sys.stderr)
+        raise SystemExit(2)
     try:
         pin = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
         name, version = str(pin["distribution"]), str(pin["version"])
-        pinned_digest = "" if printing else str(pin["package_sha256"])
-    except (IndexError, OSError, ValueError, KeyError, TypeError):
+        pinned_digest = pin.get("package_sha256")
+    except (IndexError, OSError, ValueError, KeyError, TypeError, AttributeError):
         _refuse("pin_unreadable")
-    if not printing and not _SHA256_HEX.fullmatch(pinned_digest):
+    # A development release has no ApexAi build to name; every other pin names its build.
+    development = pinned_digest is None and _DEVELOPMENT.search(version) is not None
+    if not printing and not development and (
+        not isinstance(pinned_digest, str) or not _SHA256_HEX.fullmatch(pinned_digest)
+    ):
         _refuse("pin_unreadable")
     _PIN.update(name=name, version=version)
     try:
@@ -132,6 +155,8 @@ def main() -> None:
             _refuse("record_hash_unsupported")
         path = Path(str(distribution.locate_file(file_name))).resolve()
         try:
+            if not path.is_file():  # a FIFO or a device could block the read for ever
+                _refuse("record_file_missing")
             data = path.read_bytes()
         except OSError:
             _refuse("record_file_missing")
@@ -144,7 +169,7 @@ def main() -> None:
             if not _UNHASHED.search(relative) and "__pycache__" not in relative.split("/"):
                 build.append((f"{_PACKAGE}/{relative}", digest))
     package_digest = hashlib.sha256("".join(f"{p},{d}\n" for p, d in sorted(build)).encode()).hexdigest()
-    if not printing and package_digest != pinned_digest:
+    if not printing and not development and package_digest != pinned_digest:
         _refuse("package_digest_mismatch")
     spec = importlib.machinery.PathFinder.find_spec(_PACKAGE)
     if spec is None or spec.origin is None:
@@ -158,11 +183,18 @@ def main() -> None:
         here = Path(directory)
         if any((here / subdirectory).is_symlink() for subdirectory in subdirectories):
             _refuse("package_unrecorded_file")
-        if here.name == "__pycache__":
-            continue  # bytecode caches, which installers record without digests
+        cache = here.name == "__pycache__"
         for entry in files:
+            candidate = here / entry
+            # A link would let an unrecorded name reach a verified file, inside the package or not.
+            if candidate.is_symlink():
+                _refuse("package_unrecorded_file")
+            if cache:
+                continue  # bytecode caches, which installers record without digests
+            if entry.endswith(".pyc"):
+                _refuse("package_unrecorded_file")  # sourceless bytecode: no build ships it
             try:
-                resolved = (here / entry).resolve()
+                resolved = candidate.resolve()
             except OSError:
                 _refuse("package_unreadable")
             if resolved not in verified:
@@ -172,4 +204,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception:  # installed metadata is not trusted: malformed, it refuses rather than crash
+        _refuse("package_unreadable")
