@@ -49,7 +49,11 @@ either: both are host operations, outside this read-only surface.
    step 4 cannot show:
    - every revision blocker of an incident and desired revision, including
      BLOCKED and FAILED decisions, acknowledged or not;
-   - every recovery dead end not yet acknowledged.
+   - every recovery dead end not yet acknowledged;
+   - every live decision whose run of failed attempts reached the capped
+     backoff (`repeated_failure`). It is not settled: its notification is
+     resolved (`failure_ended`) when the run ends, unless the decision settled
+     into one of the kinds above, whose own rule then applies.
 
    Report at most 20 items, and say whether more exist, from the read's
    `truncated`; `total_at_least` is a lower bound, never the total. For each
@@ -63,8 +67,8 @@ either: both are host operations, outside this read-only surface.
    a person was told. Being listed grants nothing.
 6. For each `rearmable_blocker` item from step 5, call `ops_rearms` with
    `blocking_work_id` set to its `work_id`. Do this for at most 20 items, and
-   say how many you skipped. Do not look up `unstabilized_success` or
-   `recovery` items: they can never be rearmed. Report whether an authorization
+   say how many you skipped. Do not look up `unstabilized_success`,
+   `repeated_failure` or `recovery` items: they can never be rearmed. Report whether an authorization
    exists, with its `rearm_id`, `live`, `reason`, `actor_kind`, `issued_at`
    and `consumed_by_work_id`. A live one means another decision is already
    authorized: say so rather than suggesting one.

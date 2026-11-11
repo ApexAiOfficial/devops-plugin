@@ -16,10 +16,10 @@ Context Protocol (MCP), read-only: what the engine saw, what it decided, what it
 | | Status today |
 |---|---|
 | **Source** | Public on GitHub, under the Apache License 2.0 |
-| **Version** | `1.0.0-dev.12.5`, a pre-1.0 development version ([versioning](#versioning-and-compatibility)) |
-| **Releases** | None yet: no Git tag and no GitHub release |
+| **Version** | `1.0.0-rc.1.2`, the plugin for the engine's release candidate `1.0.0rc1` ([versioning](#versioning-and-compatibility)) |
+| **Releases** | The engine's release candidate `1.0.0rc1` (2026-11-11), released privately by ApexAi for read-only monitoring. This repository has no Git tag or GitHub release yet |
 | **Distribution** | This repository's own Claude Code plugin marketplace only. Not published to PyPI, npm, Anthropic's official plugin directory or the MCP Registry |
-| **Needs** | An installation of ApexAi's build of the proprietary DevOps engine at exactly version `1.0.0.dev12` ([`pin.json`](plugins/apexai-ops/pin.json)) on the same machine, in an environment ApexAi operates. The engine is not in this repository and is not distributed |
+| **Needs** | An installation of ApexAi's build of the proprietary DevOps engine at exactly version `1.0.0rc1`, with the build digest in [`pin.json`](plugins/apexai-ops/pin.json), on the same machine, in an environment ApexAi operates. The engine is not in this repository and is not distributed |
 | **Hosted service** | None. ApexAi hosts no endpoint for this plugin, and it uses no ApexAi account, key or URL |
 | **Product** | DevOps is not publicly offered yet. Its status is on the [DevOps page](https://apexaiofficial.com/devops); ApexAi's developer kits are listed in [ApexSDK](https://apexaiofficial.com/apexsdk) |
 
@@ -431,8 +431,9 @@ the plugin promises.
 ## Versioning and compatibility
 
 - **Plugin version.** The plugin's version is the pinned engine version in SemVer form plus a
-  plugin revision: engine `1.0.0.dev12` gives plugin `1.0.0-dev.12.<revision>`, and the current
-  version is `1.0.0-dev.12.5`. Each plugin change raises the revision. CI checks that the
+  plugin revision: engine `1.0.0.dev12` gave plugin `1.0.0-dev.12.<revision>`, a release candidate
+  `1.0.0rc1` gives `1.0.0-rc.1.<revision>`, and the current version is `1.0.0-rc.1.2`. Each plugin
+  change raises the revision. CI checks that the
   marketplace and plugin manifests carry one version and that it extends the pinned engine version.
 - **Pre-1.0.** These are development versions. No release has been tagged, and the tool surface,
   settings and error codes can still change.

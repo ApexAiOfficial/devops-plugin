@@ -62,7 +62,10 @@ The fields each tool returns, its filters and the `ops://` resources are in
   recovers. Follow `recovers_work_id` or `recovers_effect_id`, not the incident.
 - An attention item's notification shows only what the host's sink reported,
   not that a person was told. Being listed grants nothing. Only
-  `rearmable_blocker` items can ever be rearmed.
+  `rearmable_blocker` items can ever be rearmed. A `repeated_failure` item is a
+  decision that has not settled: its run of failed attempts reached the capped
+  backoff (no remedy, an admission hold, or a failing collaborator), and it is
+  resolved `failure_ended` when the run ends.
 - A `retained` entry in `ops_remedy_memory` is only a candidate. Memory never
   grants authority or rewrites host policy.
 

@@ -114,11 +114,14 @@ jobs:
           pin = json.load(open("plugins/apexai-ops/pin.json"))
           versions = {market["metadata"]["version"], market["plugins"][0]["version"], plugin["version"]}
           assert len(versions) == 1, versions
-          # The engine's PEP 440 development version in SemVer form, plus a plugin revision N >= 1:
-          # 1.0.0.dev12 -> 1.0.0-dev.12.N (a plugin-only fix raises N, so installs pick it up).
-          engine = re.fullmatch(r"(\d+\.\d+\.\d+)\.dev(\d+)", pin["version"])
-          assert engine, f"no plugin version form for engine {pin['version']} yet"
-          base = f"{engine[1]}-dev.{engine[2]}"
+          # The engine's PEP 440 pre-release in SemVer form, plus a plugin revision N >= 1 (a plugin-only
+          # fix raises N, so installs pick it up): 1.0.0.dev12 -> 1.0.0-dev.12.N; 1.0.0rc1 -> 1.0.0-rc.1.N;
+          # 1.0.0rc2.dev1 -> 1.0.0-rc.2.dev.1.N. A final release's form is decided at its own cut.
+          engine = re.fullmatch(r"(\d+\.\d+\.\d+)(?:(a|b|rc)(\d+))?(?:\.dev(\d+))?", pin["version"])
+          assert engine and (engine[2] or engine[4]), f"no plugin version form for engine {pin['version']} yet"
+          base = engine[1] + (f"-{engine[2]}.{engine[3]}" if engine[2] else "")
+          if engine[4]:
+              base += (".dev." if engine[2] else "-dev.") + engine[4]
           assert re.fullmatch(re.escape(base) + r"\.[1-9][0-9]*", plugin["version"]), (plugin["version"], base)
           print("plugin", plugin["version"], "runs engine", pin["version"])
           PY
