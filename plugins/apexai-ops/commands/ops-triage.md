@@ -88,8 +88,10 @@ either: both are host operations, outside this read-only surface.
 
 Report only the fields named above, quoting identifiers; do not paste whole
 records. Take every number from a read (a `total` or a counter) or from what
-step 6 or step 7 asks you to work out. Never count a list yourself to give
-any other number; name what is in it instead. Finish with a short factual
-summary of what the reads show, and no more: an expired lease says only that
+step 6 or step 7 asks you to work out, in every part of the answer, the
+summary included. Never count a list yourself to give any other number, not
+even the length of a list you have just written out; name what is in it
+instead. Finish with a short factual summary of what the reads show, and no
+more: an expired lease says only that
 the lease expired, never that its owner crashed, died or lost control. State plainly when something could not be read
 and which error code was returned.

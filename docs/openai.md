@@ -77,8 +77,12 @@ What it enforces, whatever is in front of it:
 - **Reads only.** Only MCP's read methods pass. Only tools the server itself annotates
   `readOnlyHint: true` are listed or callable; anything else is refused before it reaches the
   server.
-- **Bounds:** 1 MiB per request, 8 sessions, 15 idle minutes per session, and 120 seconds per
-  request.
+- **Strict input.** One JSON-RPC 2.0 message per request, sent as `application/json`, with a string
+  `method`, an object `params` and a string or integer `id`. `initialize` must be a request, and an
+  `MCP-Protocol-Version` header, when sent, must match the session's. Anything else is refused before
+  it reaches the server. Only a tool the server plainly describes as read-only is listed or callable.
+- **Bounds:** 1 MiB per request, 8 sessions, 15 idle minutes per session, 120 seconds per request,
+  32 open connections, and 30 seconds to read each request.
 
 To use it from Codex over HTTP instead of stdio:
 

@@ -13,8 +13,15 @@ It is deliberately narrow:
   against DNS rebinding.
 - **Read-only, enforced here too**: only the protocol's read methods pass, and only tools the
   server itself annotates ``readOnlyHint: true`` are listed or callable.
-- **Bounded**: a request body size, a number of sessions, an idle time per session and a time per
-  request.
+- **Bounded**: a request body size, a number of sessions, an idle time per session, a time per
+  request, a number of open connections and a time to read each request from its socket.
+- **Strict about what it relays**: one JSON-RPC 2.0 message per POST, as ``application/json``;
+  a string ``method``, an object ``params``, an ``id`` that is a string or an integer (never a
+  boolean, a float or null, and never one of the bridge's own); ``initialize`` only as a request;
+  the ``MCP-Protocol-Version`` header, when sent, equal to the version the session negotiated.
+  Anything else is refused before it reaches the server, and the server's own tool list is read
+  defensively: a tool it does not describe as read-only, in the shape the protocol gives, is
+  neither listed nor callable.
 
 Usage::
 
@@ -47,8 +54,11 @@ LAUNCHER = Path(__file__).resolve().with_name("ops-mcp")
 PATH = "/mcp"
 MAX_BODY = 1 << 20
 MAX_SESSIONS = 8
+MAX_CONNECTIONS = 32
 IDLE_SECONDS = 900
 REQUEST_SECONDS = 120
+SOCKET_SECONDS = 30
+INTERNAL_PREFIX = "bridge-"
 READ_METHODS = frozenset(
     {
         "initialize",
@@ -104,8 +114,11 @@ class Session:
         self.lock = threading.Lock()
         self.used = time.monotonic()
         self.read_only_tools: set[str] | None = None
+        self.protocol_version: str | None = None
         self._buffer = b""
         self._internal = 0
+        # The bridge's own request ids: a client may not use the prefix, nor guess the rest.
+        self._internal_tag = f"{INTERNAL_PREFIX}{secrets.token_hex(8)}-"
 
     def send(self, message: Message) -> None:
         assert self.process.stdin is not None
@@ -125,7 +138,7 @@ class Session:
                     continue
                 if (
                     isinstance(message, dict)
-                    and message.get("id") == request_id
+                    and _same_id(message.get("id"), request_id)
                     and ("result" in message or "error" in message)
                 ):
                     return message
@@ -149,14 +162,14 @@ class Session:
             return
         self._internal += 1
         reply = self.request(
-            {"jsonrpc": "2.0", "id": f"bridge-{self._internal}", "method": "tools/list"}, timeout
+            {
+                "jsonrpc": "2.0",
+                "id": f"{self._internal_tag}{self._internal}",
+                "method": "tools/list",
+            },
+            timeout,
         )
-        tools = (reply or {}).get("result", {}).get("tools", [])
-        self.read_only_tools = {
-            tool["name"]
-            for tool in tools
-            if tool.get("annotations", {}).get("readOnlyHint") is True
-        }
+        self.read_only_tools = {tool["name"] for tool in read_only_tools(reply)}
 
     def close(self) -> None:
         if self.process.poll() is None:
@@ -172,6 +185,70 @@ def _error(request_id: object, code: int, message: str) -> Message:
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
 
 
+def _same_id(answered: object, asked: object) -> bool:
+    """The same JSON-RPC id, type and value: ``True`` is not ``1`` and ``1.0`` is not ``1``."""
+
+    return type(answered) is type(asked) and answered == asked
+
+
+def _valid_id(value: object) -> bool:
+    """A request id the bridge relays: a string or an integer, never a boolean or a bridge id."""
+
+    if isinstance(value, str):
+        return not value.startswith(INTERNAL_PREFIX)
+    return type(value) is int
+
+
+def read_only_tools(reply: object) -> list[Message]:
+    """The tools a ``tools/list`` reply describes as read-only, read defensively.
+
+    A reply, result, tool list, tool or annotation of any other shape than the protocol's
+    contributes nothing: what the server does not plainly describe as read-only is not.
+    """
+
+    result = reply.get("result") if isinstance(reply, dict) else None
+    tools = result.get("tools") if isinstance(result, dict) else None
+    if not isinstance(tools, list):
+        return []
+    return [
+        tool
+        for tool in tools
+        if isinstance(tool, dict)
+        and isinstance(tool.get("name"), str)
+        and isinstance(tool.get("annotations"), dict)
+        and tool["annotations"].get("readOnlyHint") is True
+    ]
+
+
+def _media_type(value: str | None) -> str:
+    return (value or "").split(";", 1)[0].strip().lower()
+
+
+def _accepts_json(value: str | None) -> bool:
+    """Whether an ``Accept`` header admits ``application/json`` (absent: anything is accepted)."""
+
+    if value is None:
+        return True
+    ranges = {_media_type(part) for part in value.split(",")}
+    return bool(ranges & {"application/json", "application/*", "*/*"})
+
+
+def _invalid(message: Message) -> Message | None:
+    """The JSON-RPC error for a message the bridge does not relay, or ``None`` for one it may."""
+
+    if "id" in message and not _valid_id(message["id"]):
+        return _error(None, -32600, "the id must be a string or an integer")
+    answer_id = message.get("id")
+    if not isinstance(message.get("method"), str):
+        return _error(answer_id, -32600, "the method must be a string")
+    if "params" in message and not isinstance(message["params"], dict):
+        return _error(answer_id, -32602, "params must be an object")
+    method = message["method"]
+    if method == "initialize" and "id" not in message:
+        return _error(None, -32600, "initialize is a request: it needs an id")
+    return None
+
+
 class Bridge(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -182,6 +259,25 @@ class Bridge(ThreadingHTTPServer):
         self.command = command
         self.sessions: dict[str, Session] = {}
         self.sessions_lock = threading.Lock()
+        self._connections = threading.BoundedSemaphore(MAX_CONNECTIONS)
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        """A thread per connection, at most ``MAX_CONNECTIONS``; one more is closed unanswered."""
+
+        if not self._connections.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._connections.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._connections.release()
 
     def reap(self) -> None:
         while True:
@@ -198,6 +294,9 @@ class Bridge(ThreadingHTTPServer):
 class Handler(BaseHTTPRequestHandler):
     server: Bridge
     protocol_version = "HTTP/1.1"
+    # Each read from the socket, the request line and headers included: a client that stops
+    # sending loses its connection instead of holding a thread.
+    timeout = SOCKET_SECONDS
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - the base signature
         _log(f"{self.address_string()} {format % args}")
@@ -259,22 +358,36 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         if not self._admitted():
             return
-        length = int(self.headers.get("Content-Length") or 0)
+        declared = (self.headers.get("Content-Length") or "").strip()
+        if not (declared.isascii() and declared.isdigit()):
+            self._reply(400, {"error": "bad body length"}, close=True)
+            return
+        length = int(declared)
         if length <= 0 or length > MAX_BODY:
             self._reply(413 if length > MAX_BODY else 400, {"error": "bad body length"}, close=True)
             return
+        if _media_type(self.headers.get("Content-Type")) != "application/json":
+            self._reply(415, {"error": "the body must be application/json"}, close=True)
+            return
+        if not _accepts_json(self.headers.get("Accept")):
+            self._reply(406, {"error": "the answer is application/json"}, close=True)
+            return
         try:
             message = json.loads(self.rfile.read(length))
-        except ValueError:
+        except (ValueError, RecursionError):
             self._reply(400, _error(None, -32700, "parse error"))
             return
         if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
             self._reply(400, _error(None, -32600, "one JSON-RPC 2.0 message per request"))
             return
-        method, request_id = message.get("method"), message.get("id")
-        if method is None:  # a response from the client: this server sends no requests
+        if "method" not in message:  # a response from the client: this server sends no requests
             self._reply(202)
             return
+        refusal = _invalid(message)
+        if refusal is not None:
+            self._reply(400, refusal)
+            return
+        method, request_id = message["method"], message.get("id")
         if method not in READ_METHODS:
             if request_id is None:
                 self._reply(202)
@@ -289,6 +402,12 @@ class Handler(BaseHTTPRequestHandler):
             session = self.server.sessions.get(key)
         if session is None:
             self._reply(404 if key else 400, {"error": "unknown or missing Mcp-Session-Id"})
+            return
+        version = self.headers.get("MCP-Protocol-Version")
+        if version is not None and version != session.protocol_version:
+            self._reply(
+                400, _error(request_id, -32600, "MCP-Protocol-Version is not this session's")
+            )
             return
         with session.lock:
             session.used = time.monotonic()
@@ -314,14 +433,17 @@ class Handler(BaseHTTPRequestHandler):
             session.close()
             self._reply(502, _error(message.get("id"), -32603, "the server did not start"))
             return
+        result = reply.get("result")
+        version = result.get("protocolVersion") if isinstance(result, dict) else None
+        session.protocol_version = version if isinstance(version, str) else None
         self._reply(200, reply, {"Mcp-Session-Id": key})
 
     def _relay(self, session: Session, message: Message) -> None:
         request_id, method = message["id"], message["method"]
         if method == "tools/call":
             session.ensure_tool_list(REQUEST_SECONDS)
-            name = (message.get("params") or {}).get("name")
-            if name not in (session.read_only_tools or set()):
+            name = message.get("params", {}).get("name")
+            if not isinstance(name, str) or name not in (session.read_only_tools or set()):
                 self._reply(
                     200, _error(request_id, -32602, f"tool {name!r} is not a read-only tool")
                 )
@@ -331,12 +453,9 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(504, _error(request_id, -32603, "the server did not answer in time"))
             return
         if method == "tools/list" and "result" in reply:
-            tools = [
-                tool
-                for tool in reply["result"].get("tools", [])
-                if tool.get("annotations", {}).get("readOnlyHint") is True
-            ]
-            reply["result"]["tools"] = tools
+            tools = read_only_tools(reply)
+            result = reply["result"] if isinstance(reply["result"], dict) else {}
+            reply["result"] = {**result, "tools": tools}
             session.read_only_tools = {tool["name"] for tool in tools}
         self._reply(200, reply)
 
